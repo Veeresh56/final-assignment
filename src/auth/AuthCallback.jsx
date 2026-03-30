@@ -1,67 +1,105 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { authConfig } from "./authConfig";
+import { fetchByMobileNumber } from "../services/userApi";
+import { storage } from "../utils/storage";
 
+// This component handles the OAuth callback after the user is redirected back from the auth server.
+// It processes the authorization code, exchanges it for tokens, and fetches user profiles based on the mobile number.
 function AuthCallback() {
   const navigate = useNavigate();
-
-  const exchangeToken = async (code) => {
-  try {
-    console.log("STEP 1: Got code →", code);
-
-    const codeVerifier = localStorage.getItem("code_verifier");
-    console.log("STEP 2: Code Verifier →", codeVerifier);
-
-    const res = await fetch(
-      "https://idbi-auth-stage.isupay.in/application/o/token/",
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/x-www-form-urlencoded",
-        },
-        body: new URLSearchParams({
-          grant_type: "authorization_code",
-          client_id: "h0xLFWq1FS6uHKVwk",
-          code,
-          redirect_uri: "http://localhost:3000/redirected",
-          code_verifier: codeVerifier,
-        }),
-      }
-    );
-
-    console.log("STEP 3: Response status →", res.status);
-
-    const data = await res.json();
-
-    console.log("STEP 4: TOKEN RESPONSE →", data);
-
-    if (res.ok && data.access_token) {
-      console.log("STEP 5: Token found ✅");
-
-      localStorage.setItem("token", data.access_token);
-
-      console.log("STEP 6: Token saved →", data.access_token);
-
-      navigate("/dashboard");
-    } else {
-      console.error("Token Error:", data);
-      alert(data.error_description || "Login failed");
-    }
-
-  } catch (err) {
-    console.error("Catch Error:", err);
-    }
-  };
+  const [error, setError] = useState("");
 
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const code = params.get("code");
+    const processLogin = async () => {
+      try {
+        setError("");
 
-    if (code) {
-      exchangeToken(code);
-    }
-  });
+        const params = new URLSearchParams(window.location.search);
+        const code = params.get("code");
+        const returnedState = params.get("state");
+        const savedState = localStorage.getItem("auth_state");
+        const codeVerifier = localStorage.getItem("code_verifier");
+        const loginMobileNumber = storage.getLoginMobileNumber();
 
-  return <p>Logging in...</p>;
+        if (!code) {
+          throw new Error("Authorization code not found.");
+        }
+
+        if (!returnedState || returnedState !== savedState) {
+          throw new Error("Invalid auth state. Please login again.");
+        }
+
+        if (!codeVerifier) {
+          throw new Error("Missing code verifier. Please login again.");
+        }
+
+        if (!loginMobileNumber) {
+          throw new Error("Missing login mobile number. Please login again.");
+        }
+
+        const tokenResponse = await fetch(authConfig.tokenEndpoint, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/x-www-form-urlencoded",
+          },
+          body: new URLSearchParams({
+            grant_type: "authorization_code",
+            client_id: authConfig.clientId,
+            code,
+            redirect_uri: authConfig.redirectUri,
+            code_verifier: codeVerifier,
+          }),
+        });
+
+        const tokenData = await tokenResponse.json();
+
+        if (!tokenResponse.ok || !tokenData.access_token) {
+          throw new Error(tokenData.error_description || "Login failed.");
+        }
+
+        storage.setToken(tokenData.access_token);
+
+        if (tokenData.id_token) {
+          localStorage.setItem("id_token", tokenData.id_token);
+        }
+
+        storage.clearAuthArtifacts();
+
+        const fetchByIdResponse = await fetchByMobileNumber(loginMobileNumber);
+        const fetchedProfiles = Array.isArray(fetchByIdResponse?.data)
+          ? fetchByIdResponse.data
+          : [];
+
+        if (fetchedProfiles.length === 0) {
+          throw new Error("No VPA records found for this mobile number.");
+        }
+
+        storage.setProfileList(fetchedProfiles);
+        storage.clearSelectedProfile();
+
+        navigate("/dashboard", { replace: true });
+      } catch (err) {
+        setError(err.message || "Unable to complete login flow.");
+      }
+    };
+
+    processLogin();
+  }, [navigate]);
+
+  if (!error) {
+    return null;
+  }
+
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-[#f5f5f5] px-4">
+      <div className="w-full max-w-md rounded bg-white p-6 shadow-md">
+        <div className="rounded border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600">
+          {error}
+        </div>
+      </div>
+    </div>
+  );
 }
 
 export default AuthCallback;

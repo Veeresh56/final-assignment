@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import MainLayout from "../layouts/MainLayout";
 import AuthCallback from "../auth/AuthCallback";
 
@@ -8,17 +8,17 @@ import Language from "../pages/Language";
 import QRDetails from "../pages/QRDetails";
 import Support from "../pages/Support";
 
+// This component defines the main application routes using React Router.
+// It includes a redirect from the root path to the dashboard.
+// routes for each main page of the application.
 function AppRoutes() {
   return (
     <BrowserRouter>
       <Routes>
-
-        <Route path="/" element={<Navigate to="/dashboard" />} />
-
-        
+        <Route path="/" element={<Navigate to="/dashboard" replace />} />
         <Route path="/redirected" element={<AuthCallback />} />
 
-        <Route  
+        <Route
           path="/dashboard"
           element={
             <MainLayout>
@@ -63,6 +63,7 @@ function AppRoutes() {
           }
         />
 
+        <Route path="*" element={<Navigate to="/dashboard" replace />} />
       </Routes>
     </BrowserRouter>
   );

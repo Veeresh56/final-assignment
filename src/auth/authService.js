@@ -1,22 +1,23 @@
 import { authConfig } from "./authConfig";
-
-// 🔐 generate random string
+// This module implements the PKCE flow for OAuth 2.0 authentication.
+// It generates a code verifier and code challenge, constructs the authorization URL
+// with the necessary parameters, and redirects the user to the authorization endpoint.
 const generateRandomString = (length = 64) => {
-  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+  const chars =
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+
   return Array.from(crypto.getRandomValues(new Uint8Array(length)))
-    .map(x => chars[x % chars.length])
+    .map((value) => chars[value % chars.length])
     .join("");
 };
 
-// 🔐 SHA256
-const sha256 = async (plain) => {
+const sha256 = async (plainText) => {
   const encoder = new TextEncoder();
-  const data = encoder.encode(plain);
+  const data = encoder.encode(plainText);
   return crypto.subtle.digest("SHA-256", data);
 };
 
-// 🔐 base64 url encode
-const base64urlencode = (buffer) => {
+const base64UrlEncode = (buffer) => {
   return btoa(String.fromCharCode(...new Uint8Array(buffer)))
     .replace(/\+/g, "-")
     .replace(/\//g, "_")
@@ -24,22 +25,30 @@ const base64urlencode = (buffer) => {
 };
 
 export const login = async () => {
-  const codeVerifier = generateRandomString();
-  localStorage.setItem("code_verifier", codeVerifier);
+  if (!authConfig.clientId) {
+    throw new Error("Missing VITE_CLIENT_ID in environment variables.");
+  }
 
-  const hashed = await sha256(codeVerifier);
-  const codeChallenge = base64urlencode(hashed);
-
+  const codeVerifier = generateRandomString(64);
   const state = generateRandomString(16);
+  const loginMobileNumber =
+    import.meta.env.VITE_LOGIN_MOBILE_NUMBER || "7008533247";
+
+  localStorage.setItem("code_verifier", codeVerifier);
+  localStorage.setItem("auth_state", state);
+  localStorage.setItem("login_mobile_number", loginMobileNumber);
+
+  const hashedVerifier = await sha256(codeVerifier);
+  const codeChallenge = base64UrlEncode(hashedVerifier);
 
   const authUrl =
-    `https://idbi-auth-stage.isupay.in/application/o/authorize/?` +
-    `client_id=${authConfig.clientId}` +
+    `${authConfig.authorizationEndpoint}?` +
+    `client_id=${encodeURIComponent(authConfig.clientId)}` +
     `&response_type=code` +
     `&redirect_uri=${encodeURIComponent(authConfig.redirectUri)}` +
-    `&scope=${authConfig.scopes.join(" ")}` +
-    `&state=${state}` +
-    `&code_challenge=${codeChallenge}` +
+    `&scope=${encodeURIComponent(authConfig.scopes.join(" "))}` +
+    `&state=${encodeURIComponent(state)}` +
+    `&code_challenge=${encodeURIComponent(codeChallenge)}` +
     `&code_challenge_method=S256`;
 
   window.location.href = authUrl;

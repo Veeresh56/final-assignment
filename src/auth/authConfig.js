@@ -1,12 +1,14 @@
+// all values will come from the .env file
 export const authConfig = {
-  issuer: "https://idbi-auth-stage.isupay.in/application/o/idbi/",
-  authorizationEndpoint: "https://idbi-auth-stage.isupay.in/application/o/authorize/",
-  tokenEndpoint: "https://idbi-auth-stage.isupay.in/application/o/token/",
-
-  clientId: "h0xLFWq1FS6uHKVwk",
-
-  redirectUri: "http://localhost:3000/redirected",
-
+  issuer:
+    import.meta.env.VITE_AUTH_ISSUER,
+  authorizationEndpoint:
+    import.meta.env.VITE_AUTHORIZATION_ENDPOINT,
+  tokenEndpoint:
+    import.meta.env.VITE_TOKEN_ENDPOINT,
+  clientId: import.meta.env.VITE_CLIENT_ID || "",
+  redirectUri:
+    import.meta.env.VITE_REDIRECT_URI,
   scopes: [
     "openid",
     "profile",

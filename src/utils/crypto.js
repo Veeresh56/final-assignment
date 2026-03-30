@@ -1,38 +1,65 @@
 import CryptoJS from "crypto-js";
 
-const AES_KEY = "a6T8tOCYiSzDTrcqPvCbJfy0wSQOVcfaevH0gtwCtoU=";
+const SECRET_KEY = import.meta.env.VITE_AES_KEY || "";
 
-export const decryptResponse = (encryptedString) => {
-  try {
-    const byteCipherText = CryptoJS.enc.Base64.parse(encryptedString);
-
-    const iv = CryptoJS.lib.WordArray.create(
-      byteCipherText.words.slice(0, 4),
-      16
-    );
-
-    const cipherText = CryptoJS.lib.WordArray.create(
-      byteCipherText.words.slice(4),
-      byteCipherText.sigBytes - 16
-    );
-
-    const decodedKey = CryptoJS.enc.Base64.parse(AES_KEY);
-
-    const decrypted = CryptoJS.AES.decrypt(
-      { ciphertext: cipherText },
-      decodedKey,
-      {
-        iv: iv,
-        padding: CryptoJS.pad.Pkcs7,
-        mode: CryptoJS.mode.CBC,
-      }
-    );
-
-    const result = decrypted.toString(CryptoJS.enc.Utf8);
-
-    return JSON.parse(result); // 🔥 IMPORTANT
-  } catch (err) {
-    console.error("Decryption failed:", err);
-    return null;
+// Helper function to decode the Base64-encoded secret key
+const getDecodedKey = () => {
+  if (!SECRET_KEY) {
+    throw new Error("Missing VITE_AES_KEY in environment variables.");
   }
+
+  return CryptoJS.enc.Base64.parse(SECRET_KEY);
+};
+
+const removeNoise = (value = "") =>
+  Array.from(value)
+    .filter((char) => char.charCodeAt(0) > 31)
+    .join("")
+    .trim();
+    
+export const encryptResponse = (plainText) => {
+  const iv = CryptoJS.lib.WordArray.random(16);
+  const decodedKey = getDecodedKey();
+
+  const encrypted = CryptoJS.AES.encrypt(
+    CryptoJS.enc.Utf8.parse(plainText),
+    decodedKey,
+    {
+      iv,
+      padding: CryptoJS.pad.Pkcs7,
+      mode: CryptoJS.mode.CBC,
+    }
+  );
+
+  const combined = iv.concat(encrypted.ciphertext);
+  return CryptoJS.enc.Base64.stringify(combined);
+};
+
+export const decryptRequest = (encryptedString) => {
+  const byteCipherText = CryptoJS.enc.Base64.parse(encryptedString);
+
+  const iv = CryptoJS.lib.WordArray.create(
+    byteCipherText.words.slice(0, 4),
+    16
+  );
+
+  const cipherText = CryptoJS.lib.WordArray.create(
+    byteCipherText.words.slice(4),
+    byteCipherText.sigBytes - 16
+  );
+
+  const decodedKey = getDecodedKey();
+
+  const decrypted = CryptoJS.AES.decrypt(
+    { ciphertext: cipherText },
+    decodedKey,
+    {
+      iv,
+      padding: CryptoJS.pad.Pkcs7,
+      mode: CryptoJS.mode.CBC,
+    }
+  );
+
+  const decryptedString = decrypted.toString(CryptoJS.enc.Utf8);
+  return removeNoise(decryptedString);
 };
